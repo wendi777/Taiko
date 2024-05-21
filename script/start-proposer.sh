@@ -2,6 +2,12 @@
 
 set -eou pipefail
 
+# Get the directory of the current script
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Source the error_handling.sh script from the util directory
+. "$SCRIPT_DIR/util/error_handling.sh"
+
 if [ "$ENABLE_PROPOSER" = "true" ]; then
     ARGS="--l1.ws ${L1_ENDPOINT_WS}
         --l2.http http://l2_execution_engine:8545
@@ -45,13 +51,13 @@ if [ "$ENABLE_PROPOSER" = "true" ]; then
         ARGS="${ARGS} --l1.blockBuilderTip ${BLOCK_BUILDER_TIP}"
     fi
 
-    if [ "$BLOB_ALLOWED" == "true" ]; then
+    if [ "$BLOB_ALLOWED" = "true" ]; then
         ARGS="${ARGS} --l1.blobAllowed"
     fi
 
     # TXMGR Settings
     if [ -n "$TX_FEE_LIMIT_MULTIPLIER" ]; then
-            ARGS="${ARGS} --tx.feeLimitMultiplier ${TX_FEE_LIMIT_MULTIPLIER}"
+        ARGS="${ARGS} --tx.feeLimitMultiplier ${TX_FEE_LIMIT_MULTIPLIER}"
     fi
 
     if [ -n "$TX_FEE_LIMIT_THRESHOLD" ]; then
@@ -93,9 +99,19 @@ if [ "$ENABLE_PROPOSER" = "true" ]; then
     if [ -n "$TX_SEND_TIMEOUT" ]; then
         ARGS="${ARGS} --tx.sendTimeout ${TX_SEND_TIMEOUT}"
     fi
-
-    exec taiko-client proposer ${ARGS}
-else
-    echo "PROPOSER IS DISABLED"
-    sleep infinity
 fi
+
+# Retry logic parameters
+MAX_RETRIES=3
+RETRY_DELAY=5
+
+# Run the proposer with retries and handle error errors
+for i in $(seq 1 $MAX_RETRIES); do
+    exec taiko-client proposer ${ARGS} && break  # Exit loop on success
+    echo "[$(date +"%Y-%m-%dT%H:%M:%S")] ERROR: Proposer failed to start (attempt $i/$MAX_RETRIES). Retrying in $RETRY_DELAY seconds..." >&2
+    sleep $RETRY_DELAY
+    RETRY_DELAY=$((RETRY_DELAY * 2))  # Exponential backoff
+done
+
+# If all retries fail, handle the error
+handle_error "Failed to start proposer after $MAX_RETRIES retries. Check the logs for details."

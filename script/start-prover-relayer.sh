@@ -2,6 +2,12 @@
 
 set -eou pipefail
 
+# Get the directory of the current script
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Source the error_handling.sh script from the util directory
+. "$SCRIPT_DIR/util/error_handling.sh"
+
 if [ "$ENABLE_PROVER" = "true" ]; then
     ARGS="--l1.ws ${L1_ENDPOINT_WS}
         --l2.ws ws://l2_execution_engine:8546
@@ -19,9 +25,8 @@ if [ "$ENABLE_PROVER" = "true" ]; then
         --minTierFee.sgx ${MIN_ACCEPTABLE_PROOF_FEE}
         --minTierFee.sgxAndZkvm ${MIN_ACCEPTABLE_PROOF_FEE}"
 
-    if [ -z "$TAIKO_NODE_IP" ]; then
-        echo "TAIKO_NODE_IP must be non-empty"
-        exit 1
+    if [ -z "$TAIKO_NODE_IP" ]; then 
+        handle_error "TAIKO_NODE_IP must be non-empty"
     else
         ARGS="${ARGS} --raiko.l2 ${TAIKO_NODE_IP}:${PORT_L2_EXECUTION_ENGINE_HTTP}"
     fi
@@ -112,7 +117,8 @@ if [ "$ENABLE_PROVER" = "true" ]; then
         ARGS="${ARGS} --tx.sendTimeout ${TX_SEND_TIMEOUT}"
     fi
 
-    exec taiko-client prover ${ARGS}
+    # Run the prover with error handling
+    exec taiko-client prover ${ARGS} || handle_error "Failed to start prover. Check the logs for details."
 else
     echo "PROVER IS DISABLED"
     sleep infinity
